@@ -37,11 +37,11 @@ export default function DashboardContent() {
       if (usuariosError) console.error('Error fetching usuarios:', usuariosError)
       const newUsers = usuarios?.length || 0
 
-      // Productos en stock (usando amount)
+      // Productos en stock (usando in_stock)
       const { data: productos, error: productosError } = await supabase
         .from('producto')
-        .select('amount')
-        .gt('amount', 0)
+        .select('in_stock')
+        .gt('in_stock', 0) // Solo productos con cantidad mayor a 0
       if (productosError) console.error('Error fetching productos:', productosError)
       const productsInStock = productos?.length || 0
 
@@ -83,7 +83,7 @@ export default function DashboardContent() {
       // Productos más vendidos
       const { data: topProds, error: topProdsError } = await supabase
         .from('purchase_items')
-        .select('product_id, quantity, producto(name, image_url, price, amount)')
+        .select('product_id, quantity, producto(name, image_url, price, in_stock)') // Cambiado a 'in_stock'
         .order('quantity', { ascending: false })
         .limit(3)
       if (topProdsError) console.error('Error fetching top products:', topProdsError)
@@ -92,7 +92,7 @@ export default function DashboardContent() {
         name: p.producto.name,
         image: p.producto.image_url || '/placeholder.svg',
         price: `$${p.producto.price}`,
-        stock: p.producto.amount || 0
+        stock: p.producto.in_stock || 0 // Cambiado a 'in_stock'
       })) || [])
     }
 

@@ -26,11 +26,11 @@ export default function ProductsContent({ isAddProductOpen, setIsAddProductOpen 
   const [form, setForm] = useState({
     name: '',
     price: '',
-    in_stock: true,
-    amount: '',
+    in_stock: '', // Almacena la cantidad como string
     unit: '',
     description: '',
     category: '',
+    image_file: null as File | null,
     image_url: ''
   })
   const [selectedProduct, setSelectedProduct] = useState<any | null>(null)
@@ -48,14 +48,14 @@ export default function ProductsContent({ isAddProductOpen, setIsAddProductOpen 
     fetchProducts()
   }, [])
 
-  const getStatusColor = (inStock: boolean) => {
-    return inStock ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+  const getStatusColor = (inStock: number) => {
+    return inStock > 0 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
   }
 
   const filteredProducts = products.filter(product => {
     if (filter === 'all') return true
-    if (filter === 'active') return product.in_stock
-    if (filter === 'inactive') return !product.in_stock
+    if (filter === 'active') return product.in_stock > 0
+    if (filter === 'inactive') return product.in_stock <= 0
     return true
   })
 
@@ -67,19 +67,54 @@ export default function ProductsContent({ isAddProductOpen, setIsAddProductOpen 
     }))
   }
 
-  const handleSaveProduct = async () => {
-    const { name, price, in_stock, amount, unit, description, category, image_url } = form
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] || null
+    if (file && file.size > 5 * 1024 * 1024) {
+      setErrorMessage('La imagen no debe exceder los 5MB.')
+      return
+    }
+    if (file && !['image/png', 'image/jpeg'].includes(file.type)) {
+      setErrorMessage('Solo se permiten imágenes PNG o JPG.')
+      return
+    }
+    setForm(prev => ({
+      ...prev,
+      image_file: file
+    }))
+  }
 
-    if (!name || !price || !amount || !unit) {
+  const handleSaveProduct = async () => {
+    const { name, price, in_stock, unit, description, category, image_file } = form
+
+    if (!name || !price || !in_stock || !unit) {
       setErrorMessage('Por favor, completa los campos obligatorios: nombre, precio, cantidad y unidad.')
       return
     }
 
     const parsedPrice = parseFloat(price)
-    const parsedAmount = parseInt(amount)
-    if (isNaN(parsedPrice) || isNaN(parsedAmount)) {
-      setErrorMessage('El precio y la cantidad deben ser valores numéricos.')
+    const parsedInStock = parseInt(in_stock, 10)
+    if (isNaN(parsedPrice) || isNaN(parsedInStock)) {
+      setErrorMessage('El precio y la cantidad deben ser valores numéricos válidos.')
       return
+    }
+
+    let image_url = selectedProduct?.image_url || ''
+    if (image_file) {
+      const fileName = `${Date.now()}_${image_file.name}`
+      const { error: uploadError } = await supabase.storage
+        .from('product-images')
+        .upload(fileName, image_file)
+
+      if (uploadError) {
+        setErrorMessage(`Error al subir la imagen: ${uploadError.message}`)
+        return
+      }
+
+      const { data: publicUrlData } = supabase.storage
+        .from('product-images')
+        .getPublicUrl(fileName)
+      // Usar el dominio público de Supabase en lugar de localhost
+      image_url = publicUrlData.publicUrl.replace('http://localhost:54321', 'https://your-supabase-project-id.supabase.co');
     }
 
     setErrorMessage(null)
@@ -91,12 +126,11 @@ export default function ProductsContent({ isAddProductOpen, setIsAddProductOpen 
           .update({
             name,
             price: parsedPrice,
-            in_stock,
-            amount: parsedAmount,
+            in_stock: parsedInStock,
             unit,
             description,
             category,
-            image_url,
+            image_url: image_url,
           })
           .eq('id', selectedProduct.id)
 
@@ -104,7 +138,7 @@ export default function ProductsContent({ isAddProductOpen, setIsAddProductOpen 
 
         setProducts(products.map((p) =>
           p.id === selectedProduct.id
-            ? { ...p, name, price: parsedPrice, in_stock, amount: parsedAmount, unit, description, category, image_url }
+            ? { ...p, name, price: parsedPrice, in_stock: parsedInStock, unit, description, category, image_url: image_url }
             : p
         ))
       } else {
@@ -113,12 +147,11 @@ export default function ProductsContent({ isAddProductOpen, setIsAddProductOpen 
           .insert({
             name,
             price: parsedPrice,
-            in_stock,
-            amount: parsedAmount,
+            in_stock: parsedInStock,
             unit,
             description,
             category,
-            image_url,
+            image_url: image_url,
             rating: 0,
             reviews: 0,
           })
@@ -139,11 +172,11 @@ export default function ProductsContent({ isAddProductOpen, setIsAddProductOpen 
       setForm({
         name: '',
         price: '',
-        in_stock: true,
-        amount: '',
+        in_stock: '',
         unit: '',
         description: '',
         category: '',
+        image_file: null,
         image_url: ''
       })
     } catch (error: any) {
@@ -155,11 +188,11 @@ export default function ProductsContent({ isAddProductOpen, setIsAddProductOpen 
     setForm({
       name: product.name || '',
       price: product.price ? product.price.toString() : '',
-      in_stock: product.in_stock ?? true,
-      amount: product.amount ? product.amount.toString() : '',
+      in_stock: product.in_stock ? product.in_stock.toString() : '',
       unit: product.unit || '',
       description: product.description || '',
       category: product.category || '',
+      image_file: null,
       image_url: product.image_url || ''
     })
     setSelectedProduct(product)
@@ -167,10 +200,10 @@ export default function ProductsContent({ isAddProductOpen, setIsAddProductOpen 
   }
 
   const handleStock = async (product: any) => {
-    const newAmount = prompt(`Actualizar cantidad de: ${product.name}`, product.amount || '0')
-    if (newAmount !== null) {
-      const parsedAmount = parseInt(newAmount)
-      if (isNaN(parsedAmount)) {
+    const newStock = prompt(`Actualizar cantidad de: ${product.name}`, product.in_stock || '0')
+    if (newStock !== null) {
+      const parsedStock = parseInt(newStock, 10)
+      if (isNaN(parsedStock)) {
         alert('La cantidad debe ser un número válido.')
         return
       }
@@ -178,13 +211,13 @@ export default function ProductsContent({ isAddProductOpen, setIsAddProductOpen 
       try {
         const { error } = await supabase
           .from('producto')
-          .update({ amount: parsedAmount })
+          .update({ in_stock: parsedStock })
           .eq('id', product.id)
 
         if (error) throw error
 
         setProducts(products.map((p) =>
-          p.id === product.id ? { ...p, amount: parsedAmount } : p
+          p.id === product.id ? { ...p, in_stock: parsedStock } : p
         ))
       } catch (error: any) {
         alert(`Error al actualizar la cantidad: ${error.message}`)
@@ -244,11 +277,11 @@ export default function ProductsContent({ isAddProductOpen, setIsAddProductOpen 
             setForm({
               name: '',
               price: '',
-              in_stock: true,
-              amount: '',
+              in_stock: '',
               unit: '',
               description: '',
               category: '',
+              image_file: null,
               image_url: ''
             })
             setSelectedProduct(null)
@@ -281,8 +314,8 @@ export default function ProductsContent({ isAddProductOpen, setIsAddProductOpen 
                 <Input id="price" value={form.price} onChange={handleFormChange} placeholder="$0.00" />
               </div>
               <div>
-                <Label htmlFor="amount">Cantidad</Label>
-                <Input id="amount" type="number" value={form.amount} onChange={handleFormChange} placeholder="0" />
+                <Label htmlFor="in_stock">Cantidad</Label>
+                <Input id="in_stock" type="number" value={form.in_stock} onChange={handleFormChange} placeholder="0" />
               </div>
               <div>
                 <Label htmlFor="unit">Unidad</Label>
@@ -297,22 +330,24 @@ export default function ProductsContent({ isAddProductOpen, setIsAddProductOpen 
                   </SelectContent>
                 </Select>
               </div>
-              <div>
-                <Label htmlFor="in_stock">En Stock</Label>
-                <input
-                  id="in_stock"
-                  type="checkbox"
-                  checked={form.in_stock}
-                  onChange={handleFormChange}
-                />
-              </div>
               <div className="col-span-2">
                 <Label htmlFor="description">Descripción</Label>
                 <Textarea id="description" value={form.description} onChange={handleFormChange} placeholder="Descripción..." />
               </div>
               <div className="col-span-2">
-                <Label htmlFor="image_url">URL de la Imagen</Label>
-                <Input id="image_url" value={form.image_url} onChange={handleFormChange} placeholder="https://..." />
+                <Label htmlFor="image_file">Imagen del Producto</Label>
+                <Input id="image_file" type="file" accept="image/*" onChange={handleFileChange} />
+                {form.image_url && (
+                  <div className="mt-2">
+                    <Image
+                      src={form.image_url}
+                      alt="Vista previa"
+                      width={100}
+                      height={100}
+                      className="rounded-lg"
+                    />
+                  </div>
+                )}
               </div>
               <div className="col-span-2 flex gap-2">
                 <Button className="flex-1 bg-gradient-to-r from-cyan-500 to-blue-500" onClick={handleSaveProduct}>
@@ -323,11 +358,11 @@ export default function ProductsContent({ isAddProductOpen, setIsAddProductOpen 
                   setForm({
                     name: '',
                     price: '',
-                    in_stock: true,
-                    amount: '',
+                    in_stock: '',
                     unit: '',
                     description: '',
                     category: '',
+                    image_file: null,
                     image_url: ''
                   })
                   setSelectedProduct(null)
@@ -350,7 +385,6 @@ export default function ProductsContent({ isAddProductOpen, setIsAddProductOpen 
               <TableHead>Precio</TableHead>
               <TableHead>Cantidad</TableHead>
               <TableHead>Unidad</TableHead>
-              <TableHead>Estado</TableHead>
               <TableHead>Acciones</TableHead>
             </TableRow>
           </TableHeader>
@@ -371,13 +405,8 @@ export default function ProductsContent({ isAddProductOpen, setIsAddProductOpen 
                 </TableCell>
                 <TableCell>{product.category}</TableCell>
                 <TableCell>${product.price}</TableCell>
-                <TableCell>{product.amount || '0'}</TableCell>
+                <TableCell>{product.in_stock || '0'}</TableCell>
                 <TableCell>{product.unit || 'N/A'}</TableCell>
-                <TableCell>
-                  <Badge className={getStatusColor(product.in_stock)}>
-                    {product.in_stock ? 'Activo' : 'Inactivo'}
-                  </Badge>
-                </TableCell>
                 <TableCell>
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
