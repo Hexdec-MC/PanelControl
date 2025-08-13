@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Dependencias
 /node_modules
 
@@ -17,4 +18,25 @@
 *.log.*
 
 # Otros
+=======
+# Dependencias
+/node_modules
+
+# Archivos de compilación de Next.js
+/.next/
+/out/
+
+# Archivos de entorno
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Archivos de cache
+*.log
+*.log.*
+
+# Otros
+>>>>>>> 77ce5e5 (Cambios 2.0)
 .DS_Store
